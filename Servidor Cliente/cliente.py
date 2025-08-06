@@ -100,11 +100,9 @@ class ClientController:
         except requests.exceptions.RequestException as e:
             print(f"Error al enviar la señal de apagado al servidor: {e}")
 
-    # Nuevos métodos para exportar e importar
     def export_contacts(self):
         """Solicita al servidor que exporte todos los contactos."""
         try:
-            # Petición GET a un nuevo endpoint que retornará el archivo CSV
             response = requests.get(f'{self.server_url}/export', timeout=30)
             response.raise_for_status()
             return response.text
@@ -114,12 +112,17 @@ class ClientController:
     def import_contacts(self, contacts_csv: str):
         """Envía al servidor un string en formato CSV para importar contactos."""
         try:
-            # Petición POST a un nuevo endpoint con el contenido del archivo
             response = requests.post(f'{self.server_url}/import', data=contacts_csv, headers={'Content-Type': 'text/csv'})
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            return {'error': f'Error al importar contactos: {e}'}
+            error_message = ""
+            if e.response is not None:
+                try:
+                    error_message = e.response.json().get('error', f'Error HTTP: {e.response.status_code}')
+                except json.JSONDecodeError:
+                    error_message = f'Error HTTP: {e.response.status_code}'
+            return {'error': f'Error al importar contactos: {error_message}'}
 
 
 class MessageDialog(QDialog):
@@ -252,7 +255,6 @@ class ClientApp(QWidget):
         self.report_button = QPushButton("Reportar un Problema")
         self.report_button.clicked.connect(self.show_message_dialog)
 
-        # Nuevos botones para Exportar/Importar
         self.export_button = QPushButton("Exportar a CSV")
         self.export_button.clicked.connect(self.export_contacts_to_file)
         self.import_button = QPushButton("Importar desde CSV")
@@ -382,7 +384,7 @@ class ClientApp(QWidget):
         video_widget = QVideoWidget()
         self.media_player.setVideoOutput(video_widget)
         
-        video_path = r"C:\Users\messi\Desktop\proyecto\Servidor Cliente"
+        video_path = r"C:\Users\messi\Desktop\conased\respuesta.mp4"
         
         self.media_player.setSource(QUrl.fromLocalFile(video_path))
         

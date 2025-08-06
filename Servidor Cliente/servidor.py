@@ -12,9 +12,12 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app) # Habilitar CORS para toda la aplicación
 
+# Define la ruta de la base de datos en una variable
+DATABASE_PATH = 'contacts.db'
+
 # Función para inicializar la base de datos
 def init_db():
-    conn = sqlite3.connect('contacts.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS contactos (
@@ -28,7 +31,7 @@ def init_db():
 
 # Función para obtener la conexión a la base de datos
 def get_db_connection():
-    conn = sqlite3.connect('contacts.db')
+    conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row  # Esto permite acceder a las columnas por nombre
     return conn
 
@@ -159,18 +162,16 @@ def export_contacts():
     contacts = cursor.fetchall()
     conn.close()
 
-    si = io.StringIO()
+    si = io.StringIO(newline='')
     cw = csv.writer(si)
     
-    # Escribir la cabecera
     cw.writerow(['nombre', 'telefono', 'direccion'])
     
-    # Escribir los datos
     cw.writerows(contacts)
     
     output = make_response(si.getvalue())
     output.headers['Content-Disposition'] = 'attachment; filename=contacts.csv'
-    output.headers['Content-type'] = 'text/csv'
+    output.headers['Content-type'] = 'text/csv; charset=utf-8' 
     
     return output
 
@@ -182,8 +183,14 @@ def import_contacts():
     csv_data = request.data.decode('utf-8')
     si = io.StringIO(csv_data)
     reader = csv.reader(si)
-    next(reader) # Saltar la cabecera
     
+    try:
+        header = next(reader)
+        if [h.strip() for h in header] != ['nombre', 'telefono', 'direccion']:
+            return jsonify({'error': 'La cabecera del archivo CSV no es válida. Se esperaba: nombre,telefono,direccion'}), 400
+    except StopIteration:
+        return jsonify({'error': 'El archivo CSV está vacío.'}), 400
+        
     imported_count = 0
     errors = []
 
@@ -197,7 +204,6 @@ def import_contacts():
                            (nombre.strip(), telefono.strip(), direccion.strip()))
             imported_count += 1
         except sqlite3.IntegrityError as e:
-            # Capturar errores de duplicados
             if "UNIQUE constraint failed: contactos.nombre" in str(e):
                 errors.append(f"Error: El contacto '{nombre}' ya existe.")
             elif "UNIQUE constraint failed: contactos.telefono" in str(e):
@@ -205,7 +211,7 @@ def import_contacts():
             else:
                 errors.append(f"Error desconocido al importar el contacto '{nombre}': {e}")
         except ValueError:
-            errors.append(f"Error: La fila '{row}' no tiene el formato correcto.")
+            errors.append(f"Error: La fila '{row}' no tiene el formato correcto (debe tener 3 columnas).")
 
     conn.commit()
     conn.close()
